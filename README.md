@@ -4,21 +4,30 @@ A service for controlling WS2812 LEDs on a Raspberry Pi over GPIO
 
 ## Installation
 
-1. Install the required dependencies:
+1. Clone the repository:
 ```bash
-sudo apt-get update
-sudo apt-get install python3-pip
-pip3 install -r requirements.txt
+cd /home/pi
+git clone https://github.com/yourusername/pi-led-service.git
+cd pi-led-service
 ```
 
-2. Copy the service files to the appropriate locations:
+2. Create and activate a Python virtual environment:
 ```bash
-sudo mkdir -p /opt/pi_led_service
-sudo cp led_controller.py /opt/pi_led_service/
+python3 -m venv venv
+source venv/bin/activate
+```
+
+3. Install the required dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Copy the service file to systemd:
+```bash
 sudo cp pi-led.service /etc/systemd/system/
 ```
 
-3. Enable and start the service:
+5. Enable and start the service:
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable pi-led
@@ -51,4 +60,5 @@ sudo python3 led_controller.py clear
 - LED indices range from 0 to 7
 - Color values range from 0 to 255
 - The service runs as root to access GPIO pins
-- The service will automatically restart if it crashes 
+- The service will automatically restart if it crashes
+- Make sure to activate the virtual environment (`source venv/bin/activate`) before running any commands 
