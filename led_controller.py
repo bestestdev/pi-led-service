@@ -3,40 +3,41 @@ import argparse
 import time
 import signal
 import sys
-from pi5neo import Pi5Neo
+from rpi5_ws2812.ws2812 import Color, WS2812SpiDriver
 
 # LED strip configuration
 MAX_LEDS = 10
-LED_BRIGHTNESS = 1.0  # Set to 0.0 for darkest and 1.0 for brightest
 
 class LEDController:
     def __init__(self, led_count):
         if led_count > MAX_LEDS:
             raise ValueError(f"Number of LEDs cannot exceed {MAX_LEDS}")
         self.led_count = led_count
-        # Initialize Pi5Neo with SPI interface (GPIO 10)
-        self.neo = Pi5Neo('/dev/spidev0.0', led_count, 800)  # 800kHz SPI speed
+        # Initialize WS2812SpiDriver with SPI channel 0, CE0
+        self.strip = WS2812SpiDriver(spi_bus=0, spi_device=0, led_count=led_count).get_strip()
         
     def set_color(self, led_index, r, g, b):
         """Set the color of a specific LED."""
         if 0 <= led_index < self.led_count:
-            self.neo.set_led_color(led_index, r, g, b)
-            self.neo.update_strip()
+            # Create a list of colors with the target color at the specified index
+            colors = [Color(0, 0, 0)] * self.led_count
+            colors[led_index] = Color(r, g, b)
+            self.strip.set_pixels(colors)
+            self.strip.show()
     
     def set_all(self, r, g, b):
         """Set all LEDs to the same color."""
-        self.neo.fill_strip(r, g, b)
-        self.neo.update_strip()
+        self.strip.set_all_pixels(Color(r, g, b))
+        self.strip.show()
     
     def clear(self):
         """Turn off all LEDs."""
-        self.neo.clear_strip()
-        self.neo.update_strip()
+        self.strip.set_all_pixels(Color(0, 0, 0))
+        self.strip.show()
     
     def cleanup(self):
         """Clean up resources."""
         self.clear()
-        # Pi5Neo handles cleanup automatically
 
 def signal_handler(sig, frame):
     """Handle Ctrl+C gracefully."""
@@ -46,7 +47,7 @@ def signal_handler(sig, frame):
 
 def main():
     global controller
-    parser = argparse.ArgumentParser(description='Control WS2812 LEDs using Pi5Neo')
+    parser = argparse.ArgumentParser(description='Control WS2812 LEDs using rpi5-ws2812')
     parser.add_argument('--leds', type=int, default=8, help=f'Number of LEDs to control (1-{MAX_LEDS})')
     
     subparsers = parser.add_subparsers(dest='command', help='Commands')
