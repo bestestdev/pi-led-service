@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import time
-from ws2812 import WS2812
+import board
+import neopixel
 import signal
 import sys
 
@@ -18,8 +19,9 @@ MAX_LEDS = 10
 # GPIO 7  = Pin 26
 # GPIO 5  = Pin 29
 # GPIO 6  = Pin 31
-LED_PINS = [17, 27, 22, 23, 24, 25, 8, 7, 5, 6]  # GPIO pins for each LED (ordered)
-LED_BRIGHTNESS = 255  # Set to 0 for darkest and 255 for brightest
+LED_PINS = [board.D17, board.D27, board.D22, board.D23, board.D24, 
+            board.D25, board.D8, board.D7, board.D5, board.D6]  # GPIO pins for each LED (ordered)
+LED_BRIGHTNESS = 1.0  # Set to 0.0 for darkest and 1.0 for brightest
 
 class LEDController:
     def __init__(self, led_count):
@@ -28,18 +30,18 @@ class LEDController:
         self.led_count = led_count
         self.leds = []
         for pin in LED_PINS[:led_count]:
-            led = WS2812(pin=pin, brightness=LED_BRIGHTNESS)
+            led = neopixel.NeoPixel(pin, 1, brightness=LED_BRIGHTNESS)
             self.leds.append(led)
         
     def set_color(self, led_index, r, g, b):
         """Set the color of a specific LED."""
         if 0 <= led_index < self.led_count:
-            self.leds[led_index].set_color(r, g, b)
+            self.leds[led_index][0] = (r, g, b)
     
     def set_all(self, r, g, b):
         """Set all LEDs to the same color."""
         for led in self.leds:
-            led.set_color(r, g, b)
+            led[0] = (r, g, b)
     
     def clear(self):
         """Turn off all LEDs."""
@@ -49,7 +51,7 @@ class LEDController:
         """Clean up resources."""
         self.clear()
         for led in self.leds:
-            led.cleanup()
+            led.deinit()
 
 def signal_handler(sig, frame):
     """Handle Ctrl+C gracefully."""
