@@ -1,23 +1,10 @@
 # Pi LED Controller
 
-A service for controlling WS2812 LEDs on a Raspberry Pi over GPIO
+A service for controlling WS2812 LEDs on a Raspberry Pi 5 using SPI interface
 
 ## Hardware Setup
 
-Connect the WS2812 LEDs to the following Raspberry Pi pins:
-
-| LED Index | Physical Pin | GPIO Number |
-|-----------|--------------|-------------|
-| 0         | 11          | 17         |
-| 1         | 13          | 27         |
-| 2         | 15          | 22         |
-| 3         | 16          | 23         |
-| 4         | 18          | 24         |
-| 5         | 22          | 25         |
-| 6         | 24          | 8          |
-| 7         | 26          | 7          |
-| 8         | 29          | 5          |
-| 9         | 31          | 6          |
+Connect the WS2812 LED strip to the Raspberry Pi 5 using the SPI interface:
 
 ### Power Setup
 1. Create a 5V power rail:
@@ -39,27 +26,26 @@ Power Supply Connection:
    GND ─────┴─────── GND Rail
 ```
 
-### LED Connections
-For each LED:
-- Connect the data pin to the Physical Pin shown in the table (this corresponds to the GPIO Number in the code)
-- Connect VCC to the 5V rail
-- Connect GND to the ground rail
-- Add a 0.1µF (100nF) capacitor in parallel between VCC and GND for each LED (helps with noise filtering)
+### LED Strip Connection
+1. Connect the LED strip's data pin to Physical Pin 19 (GPIO 10, MOSI)
+2. Connect VCC to the 5V rail
+3. Connect GND to the ground rail
+4. Add a 0.1µF (100nF) capacitor in parallel between VCC and GND near the first LED
 
 ```
-Individual LED Connection:
+LED Strip Connection:
    5V Rail ──────┬─────── VCC
                  │
                  │ 0.1µF
                  │
    GND Rail ─────┴─────── GND
+                 │
+   GPIO 10 ──────┴─────── Data In
 ```
 
 ### Protection Components
 For reliable operation of WS2812 LEDs, add the following components:
-- A 300-500Ω resistor between the Raspberry Pi's GPIO pin and the LED's data input
-
-Note: The Physical Pin numbers refer to the pin numbers on the Raspberry Pi's GPIO header, while the GPIO Numbers are used in the code to control the pins.
+- A 300-500Ω resistor between the Raspberry Pi's GPIO 10 pin and the LED strip's data input
 
 ## Installation
 
@@ -81,12 +67,18 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Copy the service file to systemd:
+4. Enable SPI interface:
+```bash
+sudo raspi-config
+```
+Navigate to Interface Options > SPI > Enable
+
+5. Copy the service file to systemd:
 ```bash
 sudo cp pi-led.service /etc/systemd/system/
 ```
 
-5. Enable and start the service:
+6. Enable and start the service:
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable pi-led
@@ -118,6 +110,6 @@ sudo python3 led_controller.py clear
 
 - LED indices range from 0 to 9
 - Color values range from 0 to 255
-- The service runs as root to access GPIO pins
+- The service runs as root to access SPI interface
 - The service will automatically restart if it crashes
 - Make sure to activate the virtual environment (`source venv/bin/activate`) before running any commands 

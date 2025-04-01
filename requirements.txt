@@ -1,2 +1,2 @@
 RPi.GPIO==0.7.1
-neopixel==1.0.0 
+Pi5Neo==1.0.5 

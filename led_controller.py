@@ -1,26 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import time
-import board
-import neopixel
 import signal
 import sys
+from pi5neo import Pi5Neo
 
 # LED strip configuration
 MAX_LEDS = 10
-# GPIO to Physical Pin mapping:
-# GPIO 17 = Pin 11
-# GPIO 27 = Pin 13
-# GPIO 22 = Pin 15
-# GPIO 23 = Pin 16
-# GPIO 24 = Pin 18
-# GPIO 25 = Pin 22
-# GPIO 8  = Pin 24
-# GPIO 7  = Pin 26
-# GPIO 5  = Pin 29
-# GPIO 6  = Pin 31
-LED_PINS = [board.D17, board.D27, board.D22, board.D23, board.D24, 
-            board.D25, board.D8, board.D7, board.D5, board.D6]  # GPIO pins for each LED (ordered)
 LED_BRIGHTNESS = 1.0  # Set to 0.0 for darkest and 1.0 for brightest
 
 class LEDController:
@@ -28,30 +14,29 @@ class LEDController:
         if led_count > MAX_LEDS:
             raise ValueError(f"Number of LEDs cannot exceed {MAX_LEDS}")
         self.led_count = led_count
-        self.leds = []
-        for pin in LED_PINS[:led_count]:
-            led = neopixel.NeoPixel(pin, 1, brightness=LED_BRIGHTNESS)
-            self.leds.append(led)
+        # Initialize Pi5Neo with SPI interface (GPIO 10)
+        self.neo = Pi5Neo('/dev/spidev0.0', led_count, 800)  # 800kHz SPI speed
         
     def set_color(self, led_index, r, g, b):
         """Set the color of a specific LED."""
         if 0 <= led_index < self.led_count:
-            self.leds[led_index][0] = (r, g, b)
+            self.neo.set_led_color(led_index, r, g, b)
+            self.neo.update_strip()
     
     def set_all(self, r, g, b):
         """Set all LEDs to the same color."""
-        for led in self.leds:
-            led[0] = (r, g, b)
+        self.neo.fill_strip(r, g, b)
+        self.neo.update_strip()
     
     def clear(self):
         """Turn off all LEDs."""
-        self.set_all(0, 0, 0)
+        self.neo.clear_strip()
+        self.neo.update_strip()
     
     def cleanup(self):
         """Clean up resources."""
         self.clear()
-        for led in self.leds:
-            led.deinit()
+        # Pi5Neo handles cleanup automatically
 
 def signal_handler(sig, frame):
     """Handle Ctrl+C gracefully."""
@@ -61,7 +46,7 @@ def signal_handler(sig, frame):
 
 def main():
     global controller
-    parser = argparse.ArgumentParser(description='Control WS2812 LEDs')
+    parser = argparse.ArgumentParser(description='Control WS2812 LEDs using Pi5Neo')
     parser.add_argument('--leds', type=int, default=8, help=f'Number of LEDs to control (1-{MAX_LEDS})')
     
     subparsers = parser.add_subparsers(dest='command', help='Commands')
