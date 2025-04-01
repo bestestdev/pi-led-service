@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import time
-from rpi_ws281x import PixelStrip, Color
+from ws2812 import WS2812
 import signal
 import sys
 
@@ -19,36 +19,27 @@ MAX_LEDS = 10
 # GPIO 5  = Pin 29
 # GPIO 6  = Pin 31
 LED_PINS = [17, 27, 22, 23, 24, 25, 8, 7, 5, 6]  # GPIO pins for each LED (ordered)
-LED_FREQ_HZ = 800000  # LED signal frequency in Hz
-LED_DMA = 10          # DMA channel to use for generating signal
 LED_BRIGHTNESS = 255  # Set to 0 for darkest and 255 for brightest
-LED_INVERT = False    # True to invert the signal
-LED_CHANNEL = 0       # Set to 1 for GPIOs 13, 19, 41, 45 or 53
 
 class LEDController:
     def __init__(self, led_count):
         if led_count > MAX_LEDS:
             raise ValueError(f"Number of LEDs cannot exceed {MAX_LEDS}")
         self.led_count = led_count
-        self.strips = []
+        self.leds = []
         for pin in LED_PINS[:led_count]:
-            strip = PixelStrip(1, pin, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
-            strip.begin()
-            self.strips.append(strip)
+            led = WS2812(pin=pin, brightness=LED_BRIGHTNESS)
+            self.leds.append(led)
         
     def set_color(self, led_index, r, g, b):
         """Set the color of a specific LED."""
         if 0 <= led_index < self.led_count:
-            color = Color(r, g, b)
-            self.strips[led_index].setPixelColor(0, color)
-            self.strips[led_index].show()
+            self.leds[led_index].set_color(r, g, b)
     
     def set_all(self, r, g, b):
         """Set all LEDs to the same color."""
-        color = Color(r, g, b)
-        for strip in self.strips:
-            strip.setPixelColor(0, color)
-            strip.show()
+        for led in self.leds:
+            led.set_color(r, g, b)
     
     def clear(self):
         """Turn off all LEDs."""
@@ -57,8 +48,8 @@ class LEDController:
     def cleanup(self):
         """Clean up resources."""
         self.clear()
-        for strip in self.strips:
-            strip._cleanup()
+        for led in self.leds:
+            led.cleanup()
 
 def signal_handler(sig, frame):
     """Handle Ctrl+C gracefully."""
