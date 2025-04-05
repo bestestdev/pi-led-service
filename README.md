@@ -81,29 +81,34 @@ git clone https://github.com/bestestdev/pi-led-service.git
 cd pi-led-service
 ```
 
-2. Create and activate a Python virtual environment:
+2. Get spidev (if needed)
+```bash
+sudo apt-get install python3-dev
+```
+
+3. Create and activate a Python virtual environment:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-3. Install the required dependencies:
+4. Install the required dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-4. For Raspberry Pi 5, enable SPI interface:
+5. For Raspberry Pi 5, enable SPI interface:
 ```bash
 sudo raspi-config
 ```
 Navigate to Interface Options > SPI > Enable
 
-5. Copy the service file to systemd:
+6. Copy the service file to systemd:
 ```bash
 sudo cp pi-led.service /etc/systemd/system/
 ```
 
-6. Enable and start the service:
+7. Enable and start the service:
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable pi-led
