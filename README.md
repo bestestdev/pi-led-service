@@ -77,7 +77,7 @@ For reliable operation of WS2812 LEDs, add the following components:
 1. Clone the repository:
 ```bash
 cd /home/pi
-git clone https://github.com/yourusername/pi-led-service.git
+git clone https://github.com/bestestdev/pi-led-service.git
 cd pi-led-service
 ```
 
