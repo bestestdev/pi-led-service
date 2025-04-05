@@ -1,0 +1,18 @@
+[Unit]
+Description=Wyoming LED Controller Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/pi-led-service
+ExecStart=/bin/bash -c 'source /home/pi/pi-led-service/venv/bin/activate && \
+/home/pi/pi-led-service/venv/bin/python3 \
+/home/pi/pi-led-service/wyoming_led_service.py \
+--uri tcp://127.0.0.1:10500 \
+--led-count 2'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target 

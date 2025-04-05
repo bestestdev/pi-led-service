@@ -1,3 +1,7 @@
 RPi.GPIO==0.7.1
 rpi5-ws2812==0.1.2
-rpi_ws281x==4.3.4 
+rpi_ws281x==4.3.4
+gpiozero==1.6.2
+spidev==3.6
+wyoming==1.5.2
+aiohttp==3.9.1 
