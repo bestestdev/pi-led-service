@@ -52,7 +52,22 @@ def is_raspberry_pi_5():
 
 def is_spi_enabled():
     """Check if SPI is enabled."""
-    return os.path.exists('/dev/spidev0.0')
+    return (os.path.exists('/dev/spidev0.0') or 
+            os.path.exists('/dev/spidev1.0') or 
+            os.path.exists('/dev/spidev10.0'))
+
+def get_available_spi_bus():
+    """Find an available SPI bus, prioritizing alternate SPI buses to avoid NVME/PCIe conflicts"""
+    # Check for SPI10 (special case on some Pi configurations)
+    if os.path.exists('/dev/spidev10.0'):
+        return 10
+    # Check for SPI1
+    elif os.path.exists('/dev/spidev1.0'):
+        return 1
+    # Fall back to SPI0 if others not available
+    elif os.path.exists('/dev/spidev0.0'):
+        return 0
+    return None
 
 class LEDController:
     """Base class for LED controllers."""
@@ -80,7 +95,7 @@ class LEDController:
 class RPI5LEDController(LEDController):
     """LED Controller for Raspberry Pi 5 using SPI."""
     
-    def __init__(self, num_leds: int):
+    def __init__(self, num_leds: int, spi_bus: Optional[int] = None):
         super().__init__(num_leds)
         try:
             # Import SPI libraries inside try block to handle import errors
@@ -89,17 +104,27 @@ class RPI5LEDController(LEDController):
             
             # On RPi5, we need to properly initialize SPI
             import spidev
+            
+            # Determine which SPI bus to use
+            if spi_bus is None:
+                self.spi_bus = get_available_spi_bus()
+                if self.spi_bus is None:
+                    raise ValueError("No SPI bus available")
+            else:
+                self.spi_bus = spi_bus
+                
             # Close any existing SPI connections first to prevent resource conflicts
             try:
                 spi = spidev.SpiDev()
-                spi.open(0, 0)
+                spi.open(self.spi_bus, 0)
                 spi.close()
             except Exception:
                 # If no existing connection, this is fine
                 pass
                 
             # Now initialize our LED driver
-            self.strip = WS2812SpiDriver(spi_bus=0, spi_device=0, led_count=num_leds).get_strip()
+            _LOGGER.info(f"Using SPI bus {self.spi_bus} for LED control")
+            self.strip = WS2812SpiDriver(spi_bus=self.spi_bus, spi_device=0, led_count=num_leds).get_strip()
             self.led_states = [self.color_class(0, 0, 0)] * self.num_leds
             _LOGGER.info("Using RPI5-WS2812 driver")
         except ImportError:
@@ -193,7 +218,7 @@ class RespeakerLEDController(LEDController):
     LED_START = 0b11100000
     
     def __init__(self, num_leds: int, gpio_pin: int = 12, brightness: int = 31, 
-                 order: str = "rgb", bus: int = 0, device: int = 1, max_speed_hz: int = 8000000):
+                 order: str = "rgb", bus: int = None, device: int = 0, max_speed_hz: int = 8000000):
         super().__init__(num_leds)
         
         # Set up GPIO for LED power
@@ -222,10 +247,23 @@ class RespeakerLEDController(LEDController):
         try:
             # Close any existing SPI connections first
             import spidev
+            
+            # Determine which SPI bus to use - default is SPI1 for ReSpeaker
+            if bus is None:
+                # For ReSpeaker, traditionally use SPI1 on older Pis
+                # But on Pi5 with NVME, try to avoid conflicts
+                self.spi_bus = get_available_spi_bus()
+                if self.spi_bus is None:
+                    raise ValueError("No SPI bus available")
+            else:
+                self.spi_bus = bus
+                
+            _LOGGER.info(f"Using SPI bus {self.spi_bus} for ReSpeaker")
+            
             try:
                 # Check if there's an existing connection to close
                 temp_spi = spidev.SpiDev()
-                temp_spi.open(bus, device)
+                temp_spi.open(self.spi_bus, device)
                 temp_spi.close()
             except Exception:
                 # If no existing connection, this is fine
@@ -233,7 +271,7 @@ class RespeakerLEDController(LEDController):
                 
             # Now open our connection
             self.spi = spidev.SpiDev()
-            self.spi.open(bus, device)
+            self.spi.open(self.spi_bus, device)
             if max_speed_hz:
                 self.spi.max_speed_hz = max_speed_hz
             _LOGGER.info("Using APA102 driver for ReSpeaker HAT")
@@ -300,16 +338,17 @@ class RespeakerLEDController(LEDController):
             _LOGGER.error(f"Error during cleanup: {e}")
 
 def create_led_controller(num_leds: int, gpio_pin: int = 12, brightness: int = 31,
-                         respeaker_mode: bool = False, led_pin: int = 18) -> LEDController:
+                         respeaker_mode: bool = False, led_pin: int = 18, 
+                         spi_bus: Optional[int] = None) -> LEDController:
     """Factory method to create the appropriate LED controller."""
     
     if respeaker_mode:
         _LOGGER.info("Using ReSpeaker HAT LED controller")
-        return RespeakerLEDController(num_leds, gpio_pin, brightness)
+        return RespeakerLEDController(num_leds, gpio_pin, brightness, bus=spi_bus)
     
     if is_raspberry_pi_5() and is_spi_enabled():
         _LOGGER.info("Detected Raspberry Pi 5 with SPI enabled")
-        return RPI5LEDController(num_leds)
+        return RPI5LEDController(num_leds, spi_bus=spi_bus)
     
     _LOGGER.info("Using standard WS281x LED controller")
     return RPI281xLEDController(num_leds, led_pin)
@@ -398,6 +437,12 @@ async def main() -> None:
         default=12,
         help="GPIO pin for ReSpeaker LED power (default: 12)",
     )
+    parser.add_argument(
+        "--spi-bus",
+        type=int,
+        choices=[0, 1, 10],
+        help="SPI bus to use (0, 1, or 10, default: auto-detect, try SPI10/SPI1 first to avoid NVME conflicts)",
+    )
     
     args = parser.parse_args()
 
@@ -410,7 +455,8 @@ async def main() -> None:
         gpio_pin=args.respeaker_pin,
         brightness=args.led_brightness,
         respeaker_mode=args.respeaker,
-        led_pin=args.led_pin
+        led_pin=args.led_pin,
+        spi_bus=args.spi_bus
     )
     
     # Signal handler for graceful shutdown

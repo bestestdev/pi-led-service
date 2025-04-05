@@ -15,10 +15,26 @@ def is_raspberry_pi_5():
         return False
 
 def is_spi_enabled():
-    return os.path.exists('/dev/spidev0.0')
+    # Check for any SPI devices
+    return (os.path.exists('/dev/spidev0.0') or 
+            os.path.exists('/dev/spidev1.0') or 
+            os.path.exists('/dev/spidev10.0'))
+
+def get_available_spi_bus():
+    """Find an available SPI bus, prioritizing alternate SPI buses to avoid NVME/PCIe conflicts"""
+    # Check for SPI10 (special case on some Pi configurations)
+    if os.path.exists('/dev/spidev10.0'):
+        return 10
+    # Check for SPI1
+    elif os.path.exists('/dev/spidev1.0'):
+        return 1
+    # Fall back to SPI0 if others not available
+    elif os.path.exists('/dev/spidev0.0'):
+        return 0
+    return None
 
 class LEDController:
-    def __init__(self, led_count):
+    def __init__(self, led_count, spi_bus=None):
         if led_count > MAX_LEDS:
             raise ValueError(f"Number of LEDs cannot exceed {MAX_LEDS}")
         self.led_count = led_count
@@ -34,17 +50,29 @@ class LEDController:
                 
                 # On RPi5, we need to properly initialize SPI
                 import spidev
+                
+                # Determine which SPI bus to use
+                if spi_bus is None:
+                    self.spi_bus = get_available_spi_bus()
+                    if self.spi_bus is None:
+                        raise ValueError("No SPI bus available")
+                else:
+                    self.spi_bus = spi_bus
+                
+                print(f"Using SPI bus {self.spi_bus} for LED control")
+                
                 # Close any existing SPI connections first to prevent resource conflicts
                 try:
                     spi = spidev.SpiDev()
-                    spi.open(0, 0)
+                    spi.open(self.spi_bus, 0)
                     spi.close()
-                except Exception:
+                except Exception as e:
+                    print(f"Note: Could not pre-close SPI bus {self.spi_bus}: {e}")
                     # If no existing connection, this is fine
                     pass
                 
                 # Now initialize our LED driver
-                self.strip = WS2812SpiDriver(spi_bus=0, spi_device=0, led_count=self.led_count).get_strip()
+                self.strip = WS2812SpiDriver(spi_bus=self.spi_bus, spi_device=0, led_count=self.led_count).get_strip()
                 self.driver_type = 'rpi5-ws2812'
                 self.led_states = [self.color_class(0, 0, 0)] * self.led_count
                 print("Using rpi5-ws2812 driver")
@@ -147,6 +175,7 @@ def main():
     global controller
     parser = argparse.ArgumentParser(description='Control WS2812 LEDs on Raspberry Pi')
     parser.add_argument('--leds', type=int, default=8, help=f'Number of LEDs to control (1-{MAX_LEDS})')
+    parser.add_argument('--spi-bus', type=int, choices=[0, 1, 10], help='SPI bus to use (0, 1, or 10, default: auto-detect)')
     
     subparsers = parser.add_subparsers(dest='command', help='Commands')
     
@@ -172,7 +201,7 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     
     try:
-        controller = LEDController(args.leds)
+        controller = LEDController(args.leds, spi_bus=args.spi_bus)
 
         if args.command == 'set':
             controller.set_color(args.led, args.r, args.g, args.b)
