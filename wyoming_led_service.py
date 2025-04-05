@@ -83,25 +83,63 @@ class RPI5LEDController(LEDController):
     def __init__(self, num_leds: int):
         super().__init__(num_leds)
         try:
+            # Import SPI libraries inside try block to handle import errors
             from rpi5_ws2812.ws2812 import Color, WS2812SpiDriver
             self.color_class = Color
+            
+            # On RPi5, we need to properly initialize SPI
+            import spidev
+            # Close any existing SPI connections first to prevent resource conflicts
+            try:
+                spi = spidev.SpiDev()
+                spi.open(0, 0)
+                spi.close()
+            except Exception:
+                # If no existing connection, this is fine
+                pass
+                
+            # Now initialize our LED driver
             self.strip = WS2812SpiDriver(spi_bus=0, spi_device=0, led_count=num_leds).get_strip()
             self.led_states = [self.color_class(0, 0, 0)] * self.num_leds
             _LOGGER.info("Using RPI5-WS2812 driver")
         except ImportError:
             _LOGGER.error("rpi5-ws2812 library not found. Install with 'pip install rpi5-ws2812'")
             sys.exit(1)
+        except Exception as e:
+            _LOGGER.error(f"Error initializing RPI5-WS2812: {e}")
+            sys.exit(1)
             
     def set_color(self, led_index: int, r: int, g: int, b: int):
         if 0 <= led_index < self.num_leds:
-            self.led_states[led_index] = self.color_class(r, g, b)
-            self.strip.set_pixels(self.led_states)
-            self.strip.show()
+            try:
+                self.led_states[led_index] = self.color_class(r, g, b)
+                self.strip.set_pixels(self.led_states)
+                self.strip.show()
+            except Exception as e:
+                _LOGGER.error(f"Error setting LED color: {e}")
             
     def set_all(self, r: int, g: int, b: int):
-        self.led_states = [self.color_class(r, g, b)] * self.num_leds
-        self.strip.set_all_pixels(self.color_class(r, g, b))
-        self.strip.show()
+        try:
+            self.led_states = [self.color_class(r, g, b)] * self.num_leds
+            self.strip.set_all_pixels(self.color_class(r, g, b))
+            self.strip.show()
+        except Exception as e:
+            _LOGGER.error(f"Error setting all LEDs: {e}")
+            
+    def cleanup(self):
+        """Clean up resources."""
+        try:
+            self.clear()
+            
+            # Properly close the SPI connection if on RPi5
+            if hasattr(self, 'strip') and hasattr(self.strip, '_spi'):
+                try:
+                    self.strip._spi.close()
+                    _LOGGER.info("SPI connection closed")
+                except Exception:
+                    pass
+        except Exception as e:
+            _LOGGER.error(f"Error during cleanup: {e}")
 
 class RPI281xLEDController(LEDController):
     """LED Controller for other Raspberry Pi models using the rpi_ws281x library."""
@@ -125,11 +163,17 @@ class RPI281xLEDController(LEDController):
         except ImportError:
             _LOGGER.error("rpi_ws281x library not found. Install with 'pip install rpi_ws281x'")
             sys.exit(1)
+        except Exception as e:
+            _LOGGER.error(f"Error initializing RPI_WS281x: {e}")
+            sys.exit(1)
             
     def set_color(self, led_index: int, r: int, g: int, b: int):
         if 0 <= led_index < self.num_leds:
-            self.strip.setPixelColor(led_index, self.color_class(r, g, b))
-            self.strip.show()
+            try:
+                self.strip.setPixelColor(led_index, self.color_class(r, g, b))
+                self.strip.show()
+            except Exception as e:
+                _LOGGER.error(f"Error setting LED color: {e}")
 
 class RespeakerLEDController(LEDController):
     """LED Controller for ReSpeaker 2mic HAT using APA102."""
@@ -176,7 +220,18 @@ class RespeakerLEDController(LEDController):
         self.leds = [self.LED_START, 0, 0, 0] * self.num_leds
         
         try:
+            # Close any existing SPI connections first
             import spidev
+            try:
+                # Check if there's an existing connection to close
+                temp_spi = spidev.SpiDev()
+                temp_spi.open(bus, device)
+                temp_spi.close()
+            except Exception:
+                # If no existing connection, this is fine
+                pass
+                
+            # Now open our connection
             self.spi = spidev.SpiDev()
             self.spi.open(bus, device)
             if max_speed_hz:
@@ -184,6 +239,9 @@ class RespeakerLEDController(LEDController):
             _LOGGER.info("Using APA102 driver for ReSpeaker HAT")
         except ImportError:
             _LOGGER.error("spidev library not found. Install with 'pip install spidev'")
+            sys.exit(1)
+        except Exception as e:
+            _LOGGER.error(f"Error initializing SPI for ReSpeaker: {e}")
             sys.exit(1)
             
     def set_color(self, led_num: int, r: int, g: int, b: int, bright_percent: int = 100):
@@ -205,12 +263,15 @@ class RespeakerLEDController(LEDController):
             
     def show(self):
         """Send the LED data to the strip."""
-        self._clock_start_frame()
-        data = list(self.leds)
-        while data:
-            self.spi.xfer2(data[:32])
-            data = data[32:]
-        self._clock_end_frame()
+        try:
+            self._clock_start_frame()
+            data = list(self.leds)
+            while data:
+                self.spi.xfer2(data[:32])
+                data = data[32:]
+            self._clock_end_frame()
+        except Exception as e:
+            _LOGGER.error(f"Error showing LEDs: {e}")
         
     def _clock_start_frame(self):
         """Send start frame to the LED strip."""
@@ -228,10 +289,15 @@ class RespeakerLEDController(LEDController):
         
     def cleanup(self):
         """Clean up resources."""
-        self.clear()
-        if self.led_power:
-            self.led_power.off()
-        self.spi.close()
+        try:
+            self.clear()
+            if self.led_power:
+                self.led_power.off()
+            if hasattr(self, 'spi'):
+                self.spi.close()
+                _LOGGER.info("SPI connection closed")
+        except Exception as e:
+            _LOGGER.error(f"Error during cleanup: {e}")
 
 def create_led_controller(num_leds: int, gpio_pin: int = 12, brightness: int = 31,
                          respeaker_mode: bool = False, led_pin: int = 18) -> LEDController:
